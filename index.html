@@ -809,13 +809,14 @@
                     '<div class="photo-section">' +
                         '<div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
                             '<button class="btn-camera" onclick="triggerCamera(\'' + room.number + '\')">📷 Add Photo</button>' +
-                            (room.photos && room.photos.length > 0 ? '<button class="btn-wa-photo" onclick="shareRoomPhotos(\'' + room.number + '\')">💬 Share via WhatsApp</button>' : '') +
+                            (photoStore[room.number] && photoStore[room.number].length > 0 ? '<button class="btn-wa-photo" onclick="shareRoomPhotos(\'' + room.number + '\')">💬 Share via WhatsApp</button>' : '') +
                             '<input type="file" accept="image/*" capture="environment" id="cam_' + room.number + '" style="display:none" onchange="handlePhoto(\'' + room.number + '\', this)">' +
                         '</div>' +
                         '<div class="photo-grid" id="photos_' + room.number + '">';
 
-                if (room.photos && room.photos.length > 0) {
-                    room.photos.forEach(function(photo, idx) {
+                var sessionPhotos = photoStore[room.number] || [];
+                if (sessionPhotos.length > 0) {
+                    sessionPhotos.forEach(function(photo, idx) {
                         html += '<div class="photo-thumb-wrap">' +
                             '<img src="' + photo.dataUrl + '" alt="Room ' + room.number + '">' +
                             '<button class="photo-thumb-del" onclick="deletePhoto(\'' + room.number + '\',' + idx + ')">✕</button>' +
@@ -1111,6 +1112,9 @@
             document.getElementById('cam_' + roomNumber).click();
         }
 
+        // In-memory only photo store — not saved to localStorage
+        var photoStore = {};
+
         function handlePhoto(roomNumber, input) {
             if (!input.files || !input.files[0]) return;
             var file = input.files[0];
@@ -1143,11 +1147,9 @@
                     var textW = textMetrics.width;
                     var textH = fontSize;
 
-                    // Bottom-left position
                     var x = padding;
                     var y = img.height - padding;
 
-                    // Semi-transparent background pill
                     ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
                     ctx.beginPath();
                     var rx = x - padding * 0.5;
@@ -1157,19 +1159,28 @@
                     ctx.roundRect(rx, ry, rw, rh, 6);
                     ctx.fill();
 
-                    // White text
                     ctx.fillStyle = 'white';
                     ctx.fillText(stampText, x, y - padding * 0.1);
 
                     var dataUrl = canvas.toDataURL('image/jpeg', 0.92);
 
-                    var room = rooms.find(function(r) { return r.number === roomNumber; });
-                    if (room) {
-                        if (!room.photos) room.photos = [];
-                        room.photos.push({ dataUrl: dataUrl });
-                        updateRoomsList();
-                        saveData();
-                    }
+                    // Auto-save to device immediately
+                    var pad = function(n) { return String(n).padStart(2,'0'); };
+                    var dateStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate());
+                    var timeStr = pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+                    var filename = 'Room_' + roomNumber + '_' + dateStr + '_' + timeStr + '.jpg';
+                    var a = document.createElement('a');
+                    a.href = dataUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+
+                    // Store in memory only for this session (thumbnail display)
+                    if (!photoStore[roomNumber]) photoStore[roomNumber] = [];
+                    photoStore[roomNumber].push({ dataUrl: dataUrl, filename: filename });
+
+                    updateRoomsList();
                     input.value = '';
                 };
                 img.src = e.target.result;
@@ -1178,50 +1189,50 @@
         }
 
         function deletePhoto(roomNumber, idx) {
-            var room = rooms.find(function(r) { return r.number === roomNumber; });
-            if (room && room.photos) {
-                room.photos.splice(idx, 1);
+            if (photoStore[roomNumber]) {
+                photoStore[roomNumber].splice(idx, 1);
                 updateRoomsList();
-                saveData();
             }
         }
 
         function savePhoto(roomNumber, idx) {
-            var room = rooms.find(function(r) { return r.number === roomNumber; });
-            if (!room || !room.photos || !room.photos[idx]) return;
-            var now = new Date();
-            var pad = function(n) { return String(n).padStart(2,'0'); };
-            var dateStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate());
-            var timeStr = pad(now.getHours()) + pad(now.getMinutes());
-            var filename = 'Room_' + roomNumber + '_' + dateStr + '_' + timeStr + '.jpg';
+            if (!photoStore[roomNumber] || !photoStore[roomNumber][idx]) return;
+            var photo = photoStore[roomNumber][idx];
             var a = document.createElement('a');
-            a.href = room.photos[idx].dataUrl;
-            a.download = filename;
+            a.href = photo.dataUrl;
+            a.download = photo.filename;
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
         }
 
         function shareRoomPhotos(roomNumber) {
-            var room = rooms.find(function(r) { return r.number === roomNumber; });
-            if (!room || !room.photos || room.photos.length === 0) return;
-            // Save all photos first so user has them in gallery, then open WhatsApp
-            room.photos.forEach(function(photo, idx) {
-                setTimeout(function() {
-                    var now = new Date();
-                    var pad = function(n) { return String(n).padStart(2,'0'); };
-                    var dateStr = now.getFullYear() + '-' + pad(now.getMonth()+1) + '-' + pad(now.getDate());
-                    var timeStr = pad(now.getHours()) + pad(now.getMinutes());
-                    var filename = 'Room_' + roomNumber + '_' + dateStr + '_' + timeStr + '_' + (idx+1) + '.jpg';
-                    var a = document.createElement('a');
-                    a.href = photo.dataUrl;
-                    a.download = filename;
-                    a.click();
-                }, idx * 400);
-            });
-            // Open WhatsApp after short delay
-            setTimeout(function() {
-                var text = encodeURIComponent('Room ' + roomNumber + ' inspection photos — ' + room.photos.length + ' photo(s) attached.');
-                window.open('https://wa.me/?text=' + text, '_blank');
-            }, room.photos.length * 400 + 500);
+            var photos = photoStore[roomNumber];
+            if (!photos || photos.length === 0) return;
+
+            var total = photos.length;
+            var current = 0;
+
+            function downloadNext() {
+                if (current >= total) {
+                    setTimeout(function() {
+                        var text = encodeURIComponent('Room ' + roomNumber + ' inspection — ' + total + ' photo(s) attached.');
+                        window.open('https://wa.me/?text=' + text, '_blank');
+                    }, 800);
+                    return;
+                }
+                var photo = photos[current];
+                var a = document.createElement('a');
+                a.href = photo.dataUrl;
+                a.download = photo.filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                current++;
+                setTimeout(downloadNext, 1500);
+            }
+
+            downloadNext();
         }
 
         // Initialize
