@@ -699,7 +699,6 @@
             
             document.getElementById('roomNumber').value = '';
             updateRoomsList();
-            updateInspectionRoomsList();
             updatePriorityPreview();
             updateInspectionPreview();
             saveData();
@@ -708,7 +707,6 @@
         function removeRoom(roomNumber) {
             rooms = rooms.filter(function(r) { return r.number !== roomNumber; });
             updateRoomsList();
-            updateInspectionRoomsList();
             updatePriorityPreview();
             updateInspectionPreview();
             saveData();
