@@ -690,8 +690,11 @@
                 observations: ''
             });
             
-            // Sort by priority
+            // Sort: ticked first by priority, then dirty/clean at bottom
             rooms.sort(function(a, b) {
+                var aBottom = (a.status === 'dirty' || a.status === 'clean') && !a.ticked;
+                var bBottom = (b.status === 'dirty' || b.status === 'clean') && !b.ticked;
+                if (aBottom !== bBottom) return aBottom ? 1 : -1;
                 var priorityDiff = priorityOrder[a.guestType] - priorityOrder[b.guestType];
                 if (priorityDiff !== 0) return priorityDiff;
                 return parseInt(a.number) - parseInt(b.number);
@@ -748,8 +751,18 @@
             var room = rooms.find(function(r) { return r.number === roomNumber; });
             if (room) {
                 room.status = newStatus;
+                // Re-sort so dirty/clean sink to bottom
+                rooms.sort(function(a, b) {
+                    var aBottom = (a.status === 'dirty' || a.status === 'clean') && !a.ticked;
+                    var bBottom = (b.status === 'dirty' || b.status === 'clean') && !b.ticked;
+                    if (aBottom !== bBottom) return aBottom ? 1 : -1;
+                    var priorityDiff = priorityOrder[a.guestType] - priorityOrder[b.guestType];
+                    if (priorityDiff !== 0) return priorityDiff;
+                    return parseInt(a.number) - parseInt(b.number);
+                });
                 updateRoomsList();
                 updatePriorityPreview();
+                updateInspectionPreview();
                 saveData();
             }
         }
@@ -761,6 +774,9 @@
                 
                 // Re-sort
                 rooms.sort(function(a, b) {
+                    var aBottom = (a.status === 'dirty' || a.status === 'clean') && !a.ticked;
+                    var bBottom = (b.status === 'dirty' || b.status === 'clean') && !b.ticked;
+                    if (aBottom !== bBottom) return aBottom ? 1 : -1;
                     var priorityDiff = priorityOrder[a.guestType] - priorityOrder[b.guestType];
                     if (priorityDiff !== 0) return priorityDiff;
                     return parseInt(a.number) - parseInt(b.number);
